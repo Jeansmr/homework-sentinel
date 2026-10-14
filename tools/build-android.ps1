@@ -90,7 +90,14 @@ if (Test-Path $apkDir) {
     # 顺手复制一份到仓库根目录，方便直接传到手机
     $release = $apks | Where-Object { $_.FullName -match 'release' } | Select-Object -First 1
     if ($release) {
-        $copyName = 'homework-sentinel-v1.0.0.apk'
+        # 从 app/build.gradle.kts 读出版本号，保证文件名和版本一致
+        $version = 'x.y.z'
+        $gradleFile = Join-Path $androidDir 'app\build.gradle.kts'
+        if (Test-Path $gradleFile) {
+            $m = Select-String -Path $gradleFile -Pattern 'versionName\s*=\s*"([^"]+)"' | Select-Object -First 1
+            if ($m) { $version = $m.Matches[0].Groups[1].Value }
+        }
+        $copyName = "homework-sentinel-v$version.apk"
         Copy-Item $release.FullName (Join-Path $root $copyName) -Force
         Write-Host ''
         Write-Host "已复制一份到 $copyName（直接传手机即可安装）"
