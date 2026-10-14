@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>作业哨兵 · 安卓错误页预览</title>
+<style>
+  /* 这个文件只是「安卓端错误页」的可视化预览，方便在电脑上看效果。
+     真正的错误页由 MainActivity.buildErrorView() 用原生控件绘制，
+     文案和排版与这里保持一致。它不会被同步进 APK。 */
+  body {
+    margin: 0; background: #2b2f45;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Microsoft YaHei", sans-serif;
+  }
+  .phone { width: 390px; margin: 0 auto; background: #F5F6FB; min-height: 844px; }
+  .page { padding: 44px 22px 32px; }
+  h1 { font-size: 20px; font-weight: 700; color: #14162B; margin: 0; }
+  .desc { margin: 10px 0 18px; font-size: 14px; line-height: 1.35; color: #5A5F7D; }
+  .tip { font-size: 13px; color: #3730A3; padding: 3px 0; }
+  .btn {
+    display: block; width: 100%; box-sizing: border-box;
+    margin-top: 20px; padding: 12px; border: 0; border-radius: 6px;
+    background: #EFEFEF; color: #14162B; font-size: 14px; text-align: center;
+  }
+  .btn + .btn { margin-top: 8px; }
+  .detail-title { margin: 26px 0 8px; font-size: 13px; font-weight: 700; color: #14162B; }
+  .detail {
+    background: #fff; padding: 12px; border-radius: 4px;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 11px; line-height: 1.5; color: #5A5F7D;
+    white-space: pre-wrap; word-break: break-all;
+  }
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="page">
+    <h1>应用上次没能正常启动</h1>
+    <p class="desc">这通常是因为手机系统缺少「Android System WebView」组件，或者系统限制了它。请按下面的办法试一次；如果还不行，点下面的按钮复制这段信息发给我。</p>
+
+    <div class="tip">1. 到应用商店搜索并更新「Android System WebView」和「Chrome」</div>
+    <div class="tip">2. 设置 → 应用管理 → 显示系统程序 → Android System WebView → 启用</div>
+    <div class="tip">3. 设置 → 应用管理 → 作业哨兵 → 清除数据后重新打开</div>
+    <div class="tip">4. 重启手机后再试一次</div>
+
+    <button class="btn">重新打开应用</button>
+    <button class="btn">复制错误信息</button>
+
+    <div class="detail-title">技术细节</div>
+    <div class="detail">型号: OPPO PHK110
+系统: Android 14 (API 34)
+应用版本: 1.0.1
+WebView: 未检测到（系统缺少 WebView 组件）
+
+—— 异常 ——
+java.lang.RuntimeException: 系统里没有找到可用的 WebView 组件。
+	at com.homesentinel.app.MainActivity.preflightCheck(MainActivity.java:96)
+	at com.homesentinel.app.MainActivity.onCreate(MainActivity.java:63)
+	at android.app.Activity.performCreate(Activity.java:8591)
+	at android.app.ActivityThread.handleLaunchActivity(ActivityThread.java:4532)</div>
+  </div>
+</div>
+</body>
+</html>
