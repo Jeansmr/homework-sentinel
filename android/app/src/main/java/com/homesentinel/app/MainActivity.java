@@ -69,6 +69,21 @@ import java.util.Locale;
  *     原因：崩溃落盘后只有「重新打开应用」按钮会清空，别的方式进来会一直看到错误页。
  *     现在：每次读取时顺手删掉，一个崩溃只展示一次，不会把应用永久卡死。
  *
+ *  4) v1.0.2「每次打开都先弹 E140 WebView 配置失败，点一下重新加载才进得去」
+ *     原因：AndroidManifest 里没有 INTERNET 权限，而 WebView 的
+ *           getSettings().setBlockNetworkLoads(false) 在没有该权限时必抛
+ *           SecurityException: Permission denied - application missing INTERNET permission。
+ *           它排在配置流程的后半段，一抛异常就把整段配置打断：
+ *           页面照样加载，但 JavaScript 开关没打开、WebViewClient 也没挂上，
+ *           于是页面永远停在占位层，只能靠用户手动点「重新加载界面」重来一次。
+ *     现在（v1.0.3）三层修：
+ *           - 清单补上 INTERNET 权限（WebView 的硬性要求，哪怕界面不联网）；
+ *           - 配置流程重排：先做「不做就没法用」的（JavaScript、WebViewClient），
+ *             再做可选项，且每个可选项单独 try/catch，坏一个不牵连其它；
+ *           - E140 降级为「可恢复」：不再当场把错误页推给用户，
+ *             而是继续加载，页面起来了就自动消失，起不来才显示原因。
+ *     详见 docs/WebView配置失败排查记录.md
+ *
  * 调试用：已开启 WebView 远程调试，手机连电脑后可在 chrome://inspect 里直接看这个页面。
  *
  * 暴露给网页层的桥（window.HWSentinel）：
@@ -111,6 +126,12 @@ public class MainActivity extends Activity {
 
     private static final long WATCHDOG_MS = 15000;
 
+    /**
+     * 给「配置降级」的宽限时间：这期间页面要是自己起来了，就当什么都没发生过。
+     * 比看门狗短，因为这条路上界面本来就已经能加载了，只是有个设置项没写成功。
+     */
+    private static final long SOFT_PROBLEM_GRACE_MS = 8000;
+
     private WebView web;
     private View rootView;
     private View errorView;
@@ -128,6 +149,9 @@ public class MainActivity extends Activity {
     private int loadToken;
     private long loadStartedAt;
     private Runnable watchdog;
+    /** 「启动不顺但还救得回来」时记下的问题：等页面起来再决定要不要打扰用户 */
+    private String softProblemTitle;
+    private String softProblemDetail;
 
     // =====================================================================
     // 启动
@@ -200,9 +224,15 @@ public class MainActivity extends Activity {
         try {
             configureWebView();
         } catch (Throwable t) {
-            Log.e(TAG, "WebView 配置失败", t);
-            showProblem("E140 WebView 配置失败", describe(t));
-            return;
+            // v1.0.3：走到这里不再直接判死刑。
+            //
+            // v1.0.2 在这里 showProblem 然后 return，等于放弃了这个 WebView：
+            // 设置项只写了一半（JavaScript 开关可能还没打开），页面永远停在占位层，
+            // 用户必须手动点「重新加载界面」才进得去。
+            // 现在先记下问题、照常加载页面：页面要是自己起来了，用户什么都不用做；
+            // 真的起不来，8 秒后错误页会带着这里的原始原因出现。
+            Log.e(TAG, "WebView 配置未全部完成，继续尝试启动", t);
+            setSoftProblem("E140 WebView 配置未全部完成", describe(t));
         }
 
         loadEntryPage();
@@ -258,6 +288,10 @@ public class MainActivity extends Activity {
             }
         };
         ui.postDelayed(watchdog, WATCHDOG_MS);
+
+        // 如果启动时发生过「配置降级」，等一小会儿再裁决：
+        // 页面起来了就作废，起不来就把原因摆出来（而不是让用户对着占位层干等 15 秒）。
+        scheduleSoftProblemCheck();
     }
 
     /** 看门狗没等到页面就绪：把「还在等」写到页面上，并继续等 */
@@ -347,6 +381,10 @@ public class MainActivity extends Activity {
         pageReady = true;
         cancelWatchdog();
         hideLoading();
+        // 界面既然起来了，之前那个「启动不顺」的提示就该退场，
+        // 不能让用户为了用应用先去点一下按钮。
+        hideProblem();
+        clearSoftProblem();
         maybeAskNotificationPermission();
         if (pendingFocusKey != null) {
             String key = pendingFocusKey;
@@ -504,31 +542,31 @@ public class MainActivity extends Activity {
     // WebView 配置
     // =====================================================================
 
+    /**
+     * 配置 WebView。
+     *
+     * ============ 这里的顺序和容错都不能随便改 ============
+     * v1.0.2 的坑：整个配置过程被包在一个 try 里，任何一个设置项抛异常，
+     * 后面的代码全都不会执行 —— 而抛异常的偏偏是排在很后面的
+     * setBlockNetworkLoads(false)（没有 INTERNET 权限时必抛 SecurityException），
+     * 于是排在前面的 JavaScript 开关也许打开了、但页面加载完却没人接管，
+     * 表现就是「界面没起来 + 出错提示 + 点重新加载才能进」。
+     *
+     * 现在的两条原则：
+     *   1) 先做「不做就没法用」的事（JavaScript、WebViewClient），再做锦上添花的设置；
+     *   2) 每个可选项单独 try/catch，坏一个不影响其它，也不会中断启动。
+     * =====================================================
+     */
     private void configureWebView() {
-        WebSettings s = web.getSettings();
-        s.setJavaScriptEnabled(true);
-        // 本地账号密码存在 localStorage 里，必须打开
-        s.setDomStorageEnabled(true);
-        s.setDatabaseEnabled(true);
-        s.setAllowFileAccess(true);
-        s.setAllowContentAccess(true);
-        s.setLoadsImagesAutomatically(true);
-        s.setSupportZoom(false);
-        s.setBuiltInZoomControls(false);
-        s.setDisplayZoomControls(false);
-        s.setUseWideViewPort(false);
-        s.setLoadWithOverviewMode(false);
-        s.setCacheMode(WebSettings.LOAD_DEFAULT);
-        s.setMediaPlaybackRequiresUserGesture(false);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            s.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
-        }
-        s.setBlockNetworkLoads(false);
+        // 第一件事：打开 JavaScript。这条失败才是真的没救。
+        web.getSettings().setJavaScriptEnabled(true);
 
-        web.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        web.setVerticalScrollBarEnabled(false);
-        web.setHorizontalScrollBarEnabled(false);
+        // 第二件事：先把 WebViewClient 挂上。
+        // 它决定「加载失败会不会有人说话」，早挂早保险；
+        // 放在设置之后的话，一个设置项出错就等于连它都没挂上。
+        installWebViewClient();
 
+        applyWebSettings();
         disableSystemDarkening();
 
         // 远程调试：手机连上电脑后 chrome://inspect 能直接看到这个页面。
@@ -538,6 +576,105 @@ public class MainActivity extends Activity {
         } catch (Throwable ignored) {}
 
         web.addJavascriptInterface(new NativeBridge(), "HWSentinel");
+    }
+
+    /**
+     * 逐项应用 WebView 设置。
+     *
+     * 每个设置项都被单独包起来：某个 ROM 上不支持 / 被策略拒绝时，
+     * 只丢这一个设置，不会把后面的设置和整个启动流程一起带走。
+     */
+    private void applyWebSettings() {
+        WebSettings s = web.getSettings();
+
+        // ---- 界面能不能用，靠这几项 ----
+        eachSetting("domStorage", new Setting() {
+            @Override public void apply(WebSettings s) { s.setDomStorageEnabled(true); }
+        });
+        eachSetting("database", new Setting() {
+            @Override public void apply(WebSettings s) { s.setDatabaseEnabled(true); }
+        });
+        eachSetting("fileAccess", new Setting() {
+            @Override public void apply(WebSettings s) { s.setAllowFileAccess(true); }
+        });
+        eachSetting("contentAccess", new Setting() {
+            @Override public void apply(WebSettings s) { s.setAllowContentAccess(true); }
+        });
+        eachSetting("images", new Setting() {
+            @Override public void apply(WebSettings s) { s.setLoadsImagesAutomatically(true); }
+        });
+
+        // ---- 外观：和网页层的 CSS 对齐，不要系统插手 ----
+        eachSetting("zoom", new Setting() {
+            @Override public void apply(WebSettings s) {
+                s.setSupportZoom(false);
+                s.setBuiltInZoomControls(false);
+                s.setDisplayZoomControls(false);
+            }
+        });
+        eachSetting("viewport", new Setting() {
+            @Override public void apply(WebSettings s) {
+                s.setUseWideViewPort(false);
+                s.setLoadWithOverviewMode(false);
+            }
+        });
+        eachSetting("media", new Setting() {
+            @Override public void apply(WebSettings s) { s.setMediaPlaybackRequiresUserGesture(false); }
+        });
+        eachSetting("mixedContent", new Setting() {
+            @Override public void apply(WebSettings s) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    s.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
+                }
+            }
+        });
+        eachSetting("cache", new Setting() {
+            @Override public void apply(WebSettings s) { s.setCacheMode(WebSettings.LOAD_DEFAULT); }
+        });
+
+        // ---- 网络：这一步是 v1.0.2 崩溃的现场 ----
+        // 界面完全来自安装包（file:///android_asset/），所以这里主动禁止联网加载，
+        // 顺便证明「这个应用不往外发任何数据」。
+        // setBlockNetworkLoads(false) 要求清单里有 INTERNET 权限（v1.0.3 已补上），
+        // 万一某个 ROM 还是拒绝，就退一步允许网络加载 —— 界面照常能用，
+        // 绝不能因为这一个设置项让用户看到错误页。
+        eachSetting("blockNetworkLoads", new Setting() {
+            @Override public void apply(WebSettings s) { s.setBlockNetworkLoads(false); }
+        }, new Setting() {
+            @Override public void apply(WebSettings s) { s.setBlockNetworkLoads(true); }
+        });
+    }
+
+    /** 一个「只碰 WebSettings」的开关，方便逐项容错 */
+    private interface Setting {
+        void apply(WebSettings s);
+    }
+
+    /** 应用一项设置；失败了也不中断，最多试一下备选写法 */
+    private void eachSetting(String name, Setting setting) {
+        eachSetting(name, setting, null);
+    }
+
+    private void eachSetting(String name, Setting setting, Setting fallback) {
+        try {
+            setting.apply(web.getSettings());
+        } catch (Throwable t) {
+            Log.w(TAG, "WebView 设置项 " + name + " 未能应用（不致命）: " + t);
+            if (fallback != null) {
+                try {
+                    fallback.apply(web.getSettings());
+                } catch (Throwable t2) {
+                    Log.w(TAG, "WebView 设置项 " + name + " 的备选写法也失败（不致命）: " + t2);
+                }
+            }
+        }
+    }
+
+    /** 让加载失败、渲染进程被杀这些情况都有人说话 */
+    private void installWebViewClient() {
+        web.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        web.setVerticalScrollBarEnabled(false);
+        web.setHorizontalScrollBarEnabled(false);
 
         web.setWebViewClient(new WebViewClient() {
 
@@ -634,6 +771,54 @@ public class MainActivity extends Activity {
         }
     }
 
+    /**
+     * 启动路上有个别环节没走通，但界面还有救。
+     *
+     * 和 showProblem 的区别：
+     *   showProblem —— 「已经没救了」，立刻把错误页推到用户面前；
+     *   softFail    —— 「这一步不顺，但后面还能站起来」，先只记下来。
+     *
+     * 记下来的问题会等页面加载完再裁决（见 scheduleSoftProblemCheck）：
+     * 页面起来了就作废，起不来才显示。这样「能自己好」的情况
+     * 就不会再变成一张要用户手动点掉的错误页。
+     */
+    private void setSoftProblem(String title, String detail) {
+        softProblemTitle = title;
+        softProblemDetail = detail;
+        Log.w(TAG, "启动降级（可恢复）：" + title);
+    }
+
+    /** 页面加载完的裁决：起来了就把降级记录作废，没起来就把原因显示出来 */
+    private void scheduleSoftProblemCheck() {
+        if (softProblemTitle == null) return;
+        final int token = loadToken;
+        ui.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (softProblemTitle == null || token != loadToken) return;
+                if (pageReady) {
+                    clearSoftProblem();
+                    return;
+                }
+                flushSoftProblem();
+            }
+        }, SOFT_PROBLEM_GRACE_MS);
+    }
+
+    /** 把降级记下的问题显示出来，别让用户对着占位层猜 */
+    private void flushSoftProblem() {
+        if (softProblemTitle == null) return;
+        final String title = softProblemTitle;
+        final String detail = softProblemDetail;
+        clearSoftProblem();
+        showProblem(title, detail + "\n\n点下面的按钮可以重新加载界面。");
+    }
+
+    private void clearSoftProblem() {
+        softProblemTitle = null;
+        softProblemDetail = null;
+    }
+
     /** 页面加载失败时的统一处理：把原因摆到用户面前 */
     private void failPage(final String title, final String reason) {
         if (pageReady) return;
@@ -651,6 +836,8 @@ public class MainActivity extends Activity {
     /** 把「加载失败」还原成「重试加载」 */
     private void retryLoad() {
         hideProblem();
+        // 用户主动重试，之前记下的「启动不顺」不再重复提示
+        clearSoftProblem();
         if (web == null) {
             // WebView 已经被销毁（渲染进程回收等），重建一个
             try {

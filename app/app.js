@@ -87,7 +87,7 @@
    * 0. 常量
    * --------------------------------------------------------- */
 
-  var APP_VERSION = '1.0.2';
+  var APP_VERSION = '1.0.3';
   var STORE_KEY = 'hw_sentinel_v1';
   var CHECK_INTERVAL_MS = 30 * 1000;
   var MINUTE = 60 * 1000;

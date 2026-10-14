@@ -1,6 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!--
+      WebView 必须要这一条，哪怕界面全部来自安装包、一个字都不联网。
+      原因：WebView 初始化时会按「当前应用有没有 INTERNET 权限」来决定网络策略，
+      没有权限时 getSettings().setBlockNetworkLoads(false) 会抛
+      java.lang.SecurityException: Permission denied - application missing INTERNET permission，
+      直接把整个 WebView 配置流程打断 —— 界面还没显示出来就先弹错误页。
+      v1.0.2 就是栽在这里（E140）。详见 docs/WebView配置失败排查记录.md
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <!-- 发送作业提醒通知 -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- 精确到分钟的截止提醒。这是闹钟类应用的正常用途。 -->

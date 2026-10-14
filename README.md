@@ -103,7 +103,7 @@
 
 **直接下载安装包：**
 
-👉 [homework-sentinel-v1.0.2.apk](https://github.com/Jeansmr/homework-sentinel/releases/download/v1.0.2/homework-sentinel-v1.0.2.apk)
+👉 [homework-sentinel-v1.0.3.apk](https://github.com/Jeansmr/homework-sentinel/releases/download/v1.0.3/homework-sentinel-v1.0.3.apk)
 
 也可以打开 [Releases 页面](https://github.com/Jeansmr/homework-sentinel/releases) 下载，
 或者按下面的步骤自己打包。
@@ -183,6 +183,30 @@ v1.0.2 起，屏幕上任何时刻都会有东西：
 超过 15 秒后页面上会出现一段自检信息，**把那一屏截图发出来**就能定位。
 
 完整的排查过程记录在 [docs/白屏排查记录.md](docs/白屏排查记录.md)。
+
+#### 如果打开先弹「E140 WebView 配置失败」，点一下「重新加载界面」才能进
+
+**先确认装的是 v1.0.3 或更新版本。** v1.0.2 的问题在于：
+安卓清单里没有声明 `INTERNET` 权限，而 WebView 的
+`setBlockNetworkLoads(false)` 在没有这个权限时会抛
+`SecurityException: Permission denied - application missing INTERNET permission`。
+
+这条异常本身只影响一个无关紧要的设置项，但它排在配置流程中间，
+一抛就把后面的「挂 WebViewClient、挂 JS 桥」一起带走，
+页面于是永远停在启动占位层，只能靠手动点一次「重新加载界面」重来。
+
+v1.0.3 分三层修掉了它：
+
+- 清单补上 `INTERNET` 权限（**用 WebView 就必须声明**，哪怕界面一个字都不联网；
+  应用仍然显式 `setBlockNetworkLoads(false)`，主动禁止联网加载）
+- 配置流程重排：先做「不做就没法用」的（JavaScript、WebViewClient），
+  再做可选项，且每个可选项单独 try/catch，坏一个不牵连其它
+- `E140` 从「当场判死刑」降级为「可恢复」：继续加载页面，
+  页面起来了就自动消失，不需要用户点任何按钮
+
+升级后如果**仍然**看到这张错误页，点「复制错误信息」把内容发出来即可。
+
+完整的排查过程记录在 [docs/WebView配置失败排查记录.md](docs/WebView配置失败排查记录.md)。
 
 ### 网页版
 
@@ -389,6 +413,7 @@ python tools/make_icons.py
 └── docs/
     ├── 闪退排查记录.md            v1.0.0「点开就闪退」的完整排查过程
     ├── 白屏排查记录.md            v1.0.1「点开是白屏」的完整排查过程
+    ├── WebView配置失败排查记录.md  v1.0.2「先弹 E140 错误页」的完整排查过程
     └── screenshots/             界面截图
 ```
 

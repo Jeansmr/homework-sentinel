@@ -62,6 +62,9 @@ try {
     if ($env:GRADLE_HOME) { [void]$candidates.Add((Join-Path $env:GRADLE_HOME 'bin\gradle.bat')) }
     [void]$candidates.Add((Join-Path (Split-Path -Parent $PSScriptRoot) 'gradle\gradle-8.9\bin\gradle.bat'))
     [void]$candidates.Add((Join-Path $env:USERPROFILE 'gradle\bin\gradle.bat'))
+    # tools\install-android-sdk.ps1 会把 Gradle 解压到 SDK 旁边，这里也找一下
+    [void]$candidates.Add((Join-Path (Split-Path -Parent $SdkRoot) 'gradle-8.9\bin\gradle.bat'))
+    [void]$candidates.Add((Join-Path $SdkRoot 'gradle-8.9\bin\gradle.bat'))
 
     $gradleExe = $candidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
 
