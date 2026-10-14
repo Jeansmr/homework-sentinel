@@ -1,15 +1,24 @@
 ﻿# =====================================================================
-#  通过 GitHub REST API 把整个项目上传到仓库（不需要 git push）
+#  通过 GitHub REST API 把整个项目上传到仓库
 #
-#  为什么这么做：
-#    某些网络环境下 git 到 github.com:443 的连接不稳定，但 api.github.com 是通的。
-#    这个脚本改用 Contents API 逐个创建文件，效果和 push 一样。
+#  为什么需要它：
+#    本项目在部分网络环境（校园网限制、代理只放行 api.github.com 等）下，
+#    git 到 github.com:443 的连接会不定时重置或 TLS 握手超时，
+#    但 api.github.com 一直正常。这时可以改用 Contents API 逐个创建文件，
+#    效果等同于 git push。
 #
 #  用法：
 #     powershell -ExecutionPolicy Bypass -File tools/push-via-api.ps1 `
-#         -Token <github_token> -Owner <用户名> -Repo homework-sentinel
+#         -Token <github_token> -Owner <用户名> [-Repo homework-sentinel] [-Branch main]
 #
-#  安全说明：token 只作为参数使用，不写入任何文件，也不写进 git 配置。
+#  性质说明：
+#    这是「一个文件一个提交」，历史会比较碎。网络正常时请优先用 git push：
+#        git remote add origin https://github.com/<用户名>/homework-sentinel.git
+#        git push -u origin main
+#
+#  安全说明：
+#    token 只读进内存，不写入任何文件，也不写进 git 配置。
+#    用完之后请到 GitHub 设置里把这个 token 删掉。
 # =====================================================================
 [CmdletBinding()]
 param(
