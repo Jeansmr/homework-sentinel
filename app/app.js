@@ -15,10 +15,79 @@
   'use strict';
 
   /* ---------------------------------------------------------
+   * -1. 最先做的事：记录脚本自身的错误
+   * -----------------------------------------------------------
+   * 为什么要抢在第一步？
+   * 如果后面的初始化抛了异常，安卓那边只会看到一片白屏，
+   * 完全不知道发生了什么。把错误记下来交给原生层，
+   * 用户就能在界面上看到原因，而不是对着白屏发呆。
+   * --------------------------------------------------------- */
+
+  var JS_ERRORS = [];
+
+  function rememberError(kind, message, extra) {
+    try {
+      JS_ERRORS.push({
+        kind: kind,
+        message: String(message == null ? '' : message),
+        extra: extra ? String(extra) : '',
+        at: new Date().toISOString()
+      });
+      if (JS_ERRORS.length > 20) JS_ERRORS.shift();
+    } catch (e) { /* 记录本身不能出错 */ }
+  }
+
+  window.addEventListener('error', function (e) {
+    if (e && e.target && e.target !== window && e.target.tagName) {
+      // 资源加载失败（css/js/图片）
+      rememberError('resource', e.target.tagName + ' 加载失败', e.target.src || e.target.href || '');
+      return;
+    }
+    rememberError('error', e && e.message, e && (e.filename + ':' + e.lineno + ':' + e.colno));
+  }, true);
+
+  window.addEventListener('unhandledrejection', function (e) {
+    rememberError('promise', e && e.reason && (e.reason.message || e.reason));
+  });
+
+  /** 把一段「界面是否真的画出来了」的判断结果交给原生层 */
+  function tellNativeReady(ok, detail) {
+    try {
+      if (ok && window.HWSentinel && window.HWSentinel.ready) {
+        window.HWSentinel.ready(detail);
+      } else if (!ok && window.HWSentinel && window.HWSentinel.reportProblem) {
+        window.HWSentinel.reportProblem('E200 网页界面没能显示出来', detail);
+      }
+    } catch (e) { /* 桥接不可用时静默 */ }
+  }
+
+  /** 自检：可见的界面到底存不存在 */
+  function interfaceIsVisible() {
+    try {
+      var shown = [].slice.call(document.querySelectorAll('.screen')).filter(function (s) {
+        return !s.hidden;
+      });
+      if (!shown.length) return '没有任何一个界面被显示（两个 screen 都处于隐藏状态）';
+
+      // 显示出来的那个界面上必须有真正占位置的内容
+      var hasBox = shown.some(function (s) {
+        return s.getBoundingClientRect().height > 40;
+      });
+      if (!hasBox) return '界面容器高度为 0，可能渲染异常';
+
+      var style = window.getComputedStyle(shown[0]);
+      if (style.display === 'none') return '界面容器被 CSS 隐藏（display:none）';
+      return null;
+    } catch (e) {
+      return '自检本身出错: ' + e;
+    }
+  }
+
+  /* ---------------------------------------------------------
    * 0. 常量
    * --------------------------------------------------------- */
 
-  var APP_VERSION = '1.0.0';
+  var APP_VERSION = '1.0.2';
   var STORE_KEY = 'hw_sentinel_v1';
   var CHECK_INTERVAL_MS = 30 * 1000;
   var MINUTE = 60 * 1000;
@@ -987,9 +1056,76 @@
     return m ? decodeURIComponent(m[1]) : null;
   }
 
-  ready(function () {
+  /** 启动占位层：界面已经画出来之后才移除，中间任何时候出问题都留着它显示提示 */
+  function removeBootOverlay() {
+    var el = document.getElementById('boot');
+    if (!el) return;
+    el.classList.add('is-gone');
+    setTimeout(function () {
+      if (el.parentNode) el.parentNode.removeChild(el);
+    }, 260);
+  }
+
+  /**
+   * 只有 http(s) 下才挂 manifest。
+   * 安卓端是从 file:///android_asset/ 加载的，file 来源会被 CORS 挡下来，
+   * 在控制台留一条红色报错、也没有任何用处。
+   */
+  function maybeAddManifestLink() {
+    if (location.protocol.indexOf('http') !== 0) {
+      var link = document.querySelector('link[rel="manifest"]');
+      if (link && link.parentNode) link.parentNode.removeChild(link);
+      return;
+    }
+    if (!document.querySelector('link[rel="manifest"]')) {
+      var l = document.createElement('link');
+      l.rel = 'manifest';
+      l.href = 'manifest.webmanifest';
+      document.head.appendChild(l);
+    }
+  }
+
+  /** 网页层的自检报告：白屏排查时，安卓端会把它一起显示出来 */
+  function diagReport() {
+    var report = {
+      version: APP_VERSION,
+      url: location.href,
+      protocol: location.protocol,
+      readyState: document.readyState,
+      hasNativeBridge: !!nativeBridge,
+      user: state.user ? state.user.name : null,
+      homeworkCount: state.homework.length,
+      view: state.ui.view,
+      screens: [],
+      errors: JS_ERRORS.slice(),
+      userAgent: navigator.userAgent
+    };
+    try {
+      Array.prototype.forEach.call(document.querySelectorAll('.screen'), function (s) {
+        report.screens.push({
+          id: s.id,
+          hidden: !!s.hidden,
+          height: Math.round(s.getBoundingClientRect().height)
+        });
+      });
+      report.localStorage = (function () {
+        try {
+          localStorage.setItem('__hw_probe__', '1');
+          localStorage.removeItem('__hw_probe__');
+          return 'usable';
+        } catch (e) { return 'unusable: ' + e; }
+      })();
+    } catch (e) {
+      report.probeError = String(e);
+    }
+    return report;
+  }
+
+  function boot() {
     // 安卓原生桥：安卓版会注入 window.HWSentinel
     if (window.HWSentinel) nativeBridge = window.HWSentinel;
+
+    maybeAddManifestLink();
 
     var saved = Store.read();
     if (saved) {
@@ -1030,6 +1166,7 @@
       version: APP_VERSION,
       reload: function () { renderAll_(); startTicking(); },
       plan: function () { return planReminders(Date.now()); },
+      diag: diagReport,
       statistics: function () {
         return {
           total: state.homework.length,
@@ -1037,6 +1174,36 @@
         };
       }
     };
-  });
+
+    // ---- 收尾：确认界面真的画出来了，才摘掉启动占位 ----
+    // 顺序很重要：先自检 → 有问题就把话说明白 → 没问题才让启动页退场。
+    var problem = interfaceIsVisible();
+    var detail = problem
+      ? (problem + '\n\n' + JSON.stringify(diagReport(), null, 2))
+      : ('界面已就绪 · ' + (state.user ? '已登录' : '待登录'));
+
+    // 就绪标记必须在通知原生层之前立好：
+    // 安卓端会紧接着用这个标记确认「页面是真的能用了」。
+    window.__HWS_READY__ = true;
+
+    if (problem) {
+      rememberError('blank', problem);
+      // 占位层留着，把真实原因写在上面，用户至少知道发生了什么
+      var tip = document.querySelector('#boot .boot__tip');
+      if (tip) tip.textContent = '界面没能显示出来：' + problem;
+      var ring = document.querySelector('#boot .boot__ring');
+      if (ring) ring.style.animation = 'none';
+      tellNativeReady(false, detail);
+    } else {
+      removeBootOverlay();
+      tellNativeReady(true, detail);
+      try {
+        if (nativeBridge && nativeBridge.diag) nativeBridge.diag(JSON.stringify(diagReport()));
+      } catch (e) { /* 忽略 */ }
+    }
+  }
+
+  ready(boot);
 
 })();
+

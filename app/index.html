@@ -11,6 +11,20 @@
 </head>
 <body>
 
+<noscript>
+  <div class="boot boot--static">
+    <p class="boot__name">作业哨兵</p>
+    <p class="boot__tip">这个界面需要开启 JavaScript 才能显示。<br />请在系统设置里恢复「Android System WebView」后重新打开。</p>
+  </div>
+</noscript>
+
+<!-- ============ 启动占位（脚本跑起来后自动移除） ============ -->
+<div class="boot" id="boot" role="status" aria-live="polite">
+  <div class="boot__ring" aria-hidden="true"></div>
+  <p class="boot__name">作业哨兵</p>
+  <p class="boot__tip">正在启动，请稍候…</p>
+</div>
+
 <!-- ============ 登录页 ============ -->
 <section class="screen screen--auth" id="screen-auth" data-screen="auth">
   <div class="auth-bg" aria-hidden="true">

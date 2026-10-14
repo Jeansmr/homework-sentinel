@@ -68,11 +68,46 @@ svg { width: 100%; height: 100%; display: block; }
 .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
 
 /* ===========================================================
+   0. 启动占位
+   -----------------------------------------------------------
+   脚本跑起来之前，屏幕上必须已经有东西。
+   「点开是白屏、没有任何提示」是最难排查的一种故障：
+   用户不知道是在加载、还是已经卡死，我们也没有任何线索。
+   这一层会在 app.js 启动完成后由脚本移除；
+   万一脚本根本没跑起来，它就留在屏幕上把话说明白。
+   =========================================================== */
+
+.boot {
+  /* 用 absolute 而不是 fixed：安卓端的加载看门狗会在超时后把这个节点
+     整体挪到屏幕中间（transform: translateY），fixed 定位不受 transform 影响，
+     文字会跑到屏幕外。 */
+  position: absolute; inset: 0; z-index: 200;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+  padding: 24px;
+  background: linear-gradient(160deg, #4F46E5 0%, #6D28D9 52%, #4338CA 100%);
+  color: #fff; text-align: center;
+}
+.boot__name { font-size: 21px; font-weight: 800; letter-spacing: .5px; }
+.boot__tip { font-size: 13px; color: rgba(255, 255, 255, .82); line-height: 1.7; }
+.boot__ring {
+  width: 34px; height: 34px; margin-bottom: 12px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, .28);
+  border-top-color: #fff;
+  animation: bootSpin .8s linear infinite;
+}
+@keyframes bootSpin { to { transform: rotate(360deg); } }
+/* 脚本接管后淡出；淡出结束由脚本移除节点 */
+.boot.is-gone { opacity: 0; transition: opacity .22s ease; pointer-events: none; }
+
+/* ===========================================================
    1. 登录页
    =========================================================== */
 
 .screen--auth {
   position: relative;
+  /* 老内核不认 dvh（Chrome 108 起才支持），先用 vh 兜底，再让 dvh 覆盖 */
+  min-height: 100vh;
   min-height: 100dvh;
   display: grid;
   place-items: center;
@@ -197,7 +232,7 @@ svg { width: 100%; height: 100%; display: block; }
    2. 主应用骨架
    =========================================================== */
 
-.screen--app { min-height: 100dvh; display: flex; flex-direction: column; }
+.screen--app { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
 
 .topbar {
   position: sticky; top: 0; z-index: 30;
@@ -499,6 +534,7 @@ svg { width: 100%; height: 100%; display: block; }
 @keyframes fadeIn { from { opacity: 0; } }
 .sheet__panel {
   position: relative; width: 100%;
+  max-height: 92vh;
   max-height: 92dvh; overflow-y: auto;
   padding: 8px 20px calc(20px + var(--safe-b));
   background: var(--card);

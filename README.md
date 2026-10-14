@@ -103,7 +103,7 @@
 
 **直接下载安装包：**
 
-👉 [homework-sentinel-v1.0.1.apk](https://github.com/Jeansmr/homework-sentinel/releases/download/v1.0.1/homework-sentinel-v1.0.1.apk)
+👉 [homework-sentinel-v1.0.2.apk](https://github.com/Jeansmr/homework-sentinel/releases/download/v1.0.2/homework-sentinel-v1.0.2.apk)
 
 也可以打开 [Releases 页面](https://github.com/Jeansmr/homework-sentinel/releases) 下载，
 或者按下面的步骤自己打包。
@@ -155,6 +155,34 @@ powershell -ExecutionPolicy Bypass -File tools\抓崩溃日志.ps1
 它长这样（`app/_errorpage-preview.html` 是同一套文案的可视预览）：
 
 ![错误页预览](docs/screenshots/errorpage.png)
+
+#### 如果打开是白屏 / 一片空白
+
+**先确认装的是 v1.0.2 或更新版本。** v1.0.1 只防住了「抛异常」这一种失败，
+而网页加载失败、渲染进程被回收这类问题**一个异常都不会抛**，
+WebView 会安安静静显示一片空白，代码里没有任何地方会知道。
+
+v1.0.2 起，屏幕上任何时刻都会有东西：
+
+- 启动时先显示「正在启动，请稍候…」，确认界面画出来了才撤掉
+- 页面加载失败、返回错误码、渲染进程被杀，都会显示具体原因
+- 15 秒还没起来，会在页面上写出已等待秒数 + 自检结果
+  （`readyState` / 脚本有没有跑起来 / 本地存储能不能用）
+- 加载前先检查安装包里的界面文件读不读得到，读不到就直接报错
+- 网页脚本报错也会被捕获并显示出来
+- 已开启远程调试：手机连电脑后 `chrome://inspect` 可直接查看这个页面
+
+如果你看到的是**一直停在「正在启动，请稍候…」**，说明安装包里的
+界面文件没能跑起来，按顺序试：
+
+1. 卸载后重新安装这个 APK（安装包可能没装完整）
+2. 到应用商店更新「Android System WebView」和「Chrome」
+3. 设置 → 应用管理 → 显示系统程序 → Android System WebView → 启用
+4. 重启手机
+
+超过 15 秒后页面上会出现一段自检信息，**把那一屏截图发出来**就能定位。
+
+完整的排查过程记录在 [docs/白屏排查记录.md](docs/白屏排查记录.md)。
 
 ### 网页版
 
@@ -345,16 +373,22 @@ python tools/make_icons.py
 ├── tools/
 │   ├── serve.js                 本地静态服务器
 │   ├── verify.js                Playwright 端到端验证（18 项检查 + 截图）
+│   ├── blank-screen-test.mjs    白屏回归测试（零依赖，直接驱动 CDP）
+│   ├── cdp-webtest.mjs          用真实手机视口跑一遍登录后的主界面
+│   ├── check-android.ps1        安卓端编译自检（不需要 Gradle）
 │   ├── make_icons.py            生成应用图标
 │   ├── install-android-sdk.ps1  一键装 SDK 组件
 │   ├── make-keystore.ps1        生成签名密钥
 │   ├── build-android.ps1        一键打包（Windows）
-│   └── build-android.sh         一键打包（macOS / Linux）
+│   ├── build-android.sh         一键打包（macOS / Linux）
+│   └── 抓崩溃日志.ps1            一键抓手机 logcat 崩溃堆栈
 │
 ├── scripts/
 │   └── sync-web-to-android.ps1  把 app/ 同步进安卓工程
 │
 └── docs/
+    ├── 闪退排查记录.md            v1.0.0「点开就闪退」的完整排查过程
+    ├── 白屏排查记录.md            v1.0.1「点开是白屏」的完整排查过程
     └── screenshots/             界面截图
 ```
 
@@ -411,6 +445,56 @@ node tools/verify.js
 | `app/_diag.html` | 列出所有超出视口宽度的元素，排查布局溢出 |
 
 这三个文件不会被同步进安卓工程（同步脚本会按 `_` 前缀和文件名排除）。
+
+### 白屏回归测试
+
+「点开是白屏、没有任何提示」是最难排查的一类故障：WebView 不抛异常、
+不报错，只是安静地显示一片空白。这套测试把「界面起不来」的情况真的做出来，
+确认屏幕上始终有给人看的文字：
+
+```bash
+node tools/serve.js &
+node tools/blank-screen-test.mjs
+```
+
+| 场景 | 模拟的情况 |
+| --- | --- |
+| A | 一切正常 |
+| B | JavaScript 完全没运行（关掉 Chrome 的脚本执行） |
+| C | `app.js` 加载失败（复制一份 app/，真的把文件删掉） |
+
+最近一次运行结果：
+
+```
+全部故障场景屏幕上都有内容，没有白屏 ✅
+截图目录：.dev-shots/blank-test
+```
+
+它用 Node 内置的 WebSocket 直接驱动 CDP，**不需要 Playwright 等任何依赖**。
+截图会写到 `.dev-shots/blank-test/`，可以直接看效果。
+
+> 注意：不要用 CDP 的请求拦截来模拟加载失败——Service Worker 和缓存会把
+> 拦截绕过去，测出来全是「假通过」。必须让文件真的读不到。
+
+### 安卓端编译自检
+
+改完安卓代码后，不用等 Gradle（它要联网下载 AGP），几秒钟就能确认能不能编过：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\check-android.ps1
+```
+
+1. 检查网页资源能否同步进 `assets/www`，入口文件是否完整
+2. 用 `aapt` 编译资源、生成 `R.java`——资源或清单有问题在这里暴露
+3. 用 `javac` 对着真正的 `android.jar` 编译全部 Java
+
+```
+== 3/3  编译 Java（javac + android.jar）==
+   OK   编译通过，生成 35 个 class
+安卓端自检全部通过。
+```
+
+它**不打包 APK**——正式出包仍然用 `tools\build-android.ps1`（走 Gradle）。
 
 ---
 
