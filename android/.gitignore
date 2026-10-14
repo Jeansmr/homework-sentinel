@@ -1,0 +1,12 @@
+# 只提交源码，不提交构建产物与本地配置
+.gradle/
+build/
+app/build/
+local.properties
+.idea/
+*.iml
+*.hprof
+.kotlin/
+captures/
+.externalNativeBuild/
+.cxx/

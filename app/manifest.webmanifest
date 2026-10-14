@@ -1,0 +1,33 @@
+{
+  "name": "作业哨兵 — 作业截止提醒",
+  "short_name": "作业哨兵",
+  "description": "把快要截止的作业提前喊你一声。可自定义提前提醒时间，支持每日早报与夜间免打扰。",
+  "lang": "zh-CN",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#4F46E5",
+  "theme_color": "#4F46E5",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+# ---- 开发过程产生的临时文件 ----
+.dev-shots/
+*.log
+
+# ---- 安卓构建产物 ----
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/*.iml
+android/.kotlin/
+android/captures/
+
+# ---- 签名密钥：绝对不要提交 ----
+android/keystore/
+*.jks
+*.keystore
+
+# ---- 打包好的安装包：本地生成，不进仓库 ----
+*.apk
+*.aab
+
+# ---- Node ----
+node_modules/
+package-lock.json
+
+# ---- 系统 / 编辑器 ----
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# ---- Python ----
+__pycache__/
+*.pyc

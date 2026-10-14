@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>手机宽度预览</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #2b2f45; }
+  iframe { width: 390px; height: 844px; border: 0; background: #fff; display: block; margin: 0 auto; }
+</style>
+</head>
+<body>
+<iframe id="f"></iframe>
+<script>
+  var p = new URLSearchParams(location.search);
+  var view = p.get('view') || 'home';
+  var page = p.get('page') || 'index.html';
+
+  if (p.get('seed') === '1') {
+    var now = Date.now(), H = 3600e3, D = 24 * H;
+    localStorage.setItem('hw_sentinel_v1', JSON.stringify({
+      v: 1,
+      user: { name: '小同', hash: 'demo', createdAt: now },
+      homework: [
+        { id: 'demo1', title: '第五章 定积分 课后习题 1-20 题', course: '高等数学', due: now + 5 * H,
+          note: '写在作业本上，拍照上传到学习通', done: false, createdAt: now },
+        { id: 'demo2', title: '实验报告：霍尔效应测量', course: '大学物理', due: now + 30 * H,
+          note: '需要包含误差分析和数据处理过程', done: false, createdAt: now },
+        { id: 'demo3', title: '读书笔记《乡土中国》第 3 章', course: '社会学概论', due: now + 3 * D + 4 * H,
+          note: '不少于 800 字', done: false, createdAt: now },
+        { id: 'demo4', title: 'Unit 5 听力练习 + 作文', course: '大学英语', due: now + 6 * D,
+          note: '', done: false, createdAt: now },
+        { id: 'demo5', title: '课程设计选题申请表', course: '数据结构', due: now - 6 * H,
+          note: '已错过截止时间，尽快联系老师补交', done: false, createdAt: now },
+        { id: 'demo6', title: '第一章 绪论 思考题', course: '马克思主义基本原理', due: now - 2 * D,
+          note: '', done: true, createdAt: now, doneAt: now - D }
+      ],
+      settings: {
+        offsets: ['d3', 'd1', 'h2'], dailyDigest: true, digestTime: '07:30',
+        quietHours: true, quietFrom: '23:00', quietTo: '07:00'
+      }
+    }));
+  }
+
+  document.getElementById('f').src = page + '?view=' + view;
+
+  // 诊断：把 iframe 内部各元素的真实宽度打出来
+  if (p.get('diag') === '1') {
+    document.getElementById('f').addEventListener('load', function () {
+      setTimeout(function () {
+        var d = document.getElementById('f').contentDocument;
+        var w = document.getElementById('f').contentWindow;
+        var vw = d.documentElement.clientWidth;
+        var rows = ['iframe innerWidth=' + w.innerWidth + '  clientWidth=' + vw +
+                    '  body.scrollWidth=' + d.body.scrollWidth +
+                    '  html.scrollWidth=' + d.documentElement.scrollWidth];
+        d.querySelectorAll('.content, .topbar, .tabbar, .panel, .hw, .hero, .about, .about li, .switch-row, .offset, .btn, .statbar, .perm').forEach(function (el) {
+          var r = el.getBoundingClientRect();
+          rows.push(el.tagName.toLowerCase() + '.' + (el.className || '').toString().trim().split(/\s+/).join('.') +
+                    '  left=' + r.left.toFixed(1) + ' right=' + r.right.toFixed(1) + ' w=' + r.width.toFixed(1));
+        });
+        var pre = document.createElement('pre');
+        pre.id = 'diag';
+        pre.style.cssText = 'position:fixed;left:0;top:0;z-index:9999;background:#fff;font:10px monospace;' +
+                            'padding:4px;margin:0;white-space:pre-wrap;max-width:100vw;color:#000';
+        pre.textContent = rows.join('\n');
+        document.body.appendChild(pre);
+      }, 900);
+    });
+  }
+</script>
+</body>
+</html>

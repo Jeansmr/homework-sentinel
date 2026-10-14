@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- 作业数据存在 WebView 的 localStorage 里，随应用一起备份 -->
+    <include domain="database" path="." />
+    <include domain="sharedpref" path="." />
+</full-backup-content>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 启动时的底色，与网页界面一致，避免出现白屏闪烁 -->
+    <color name="brand">#4F46E5</color>
+    <color name="brand_dark">#3730A3</color>
+    <color name="page_bg">#F5F6FB</color>
+    <color name="white">#FFFFFFFF</color>
+</resources>

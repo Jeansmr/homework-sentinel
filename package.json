@@ -1,0 +1,31 @@
+{
+  "name": "homework-sentinel",
+  "version": "1.0.0",
+  "private": true,
+  "description": "作业哨兵 —— 作业截止时间提醒应用（安卓 APK + PWA 双形态）",
+  "keywords": [
+    "homework",
+    "reminder",
+    "android",
+    "pwa",
+    "chaoxing",
+    "学习通",
+    "作业提醒"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "serve": "node tools/serve.js",
+    "verify": "node tools/verify.js",
+    "icons": "python tools/make_icons.py",
+    "sync": "powershell -ExecutionPolicy Bypass -File scripts/sync-web-to-android.ps1",
+    "build:android": "powershell -ExecutionPolicy Bypass -File tools/build-android.ps1",
+    "build:android:unix": "bash tools/build-android.sh"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "comments": {
+    "dependencies": "运行时零依赖：网页部分是原生 HTML/CSS/JS，安卓部分只依赖 Android Gradle 插件。",
+    "devDependencies": "tools/verify.js 需要 playwright-core，属于可选的开发依赖，请见 README 的「开发与测试」一节。"
+  }
+}
