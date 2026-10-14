@@ -103,7 +103,7 @@
 
 **直接下载安装包：**
 
-👉 [homework-sentinel-v1.0.0.apk](https://github.com/Jeansmr/homework-sentinel/releases/download/v1.0.0/homework-sentinel-v1.0.0.apk)
+👉 [homework-sentinel-v1.0.1.apk](https://github.com/Jeansmr/homework-sentinel/releases/download/v1.0.1/homework-sentinel-v1.0.1.apk)
 
 也可以打开 [Releases 页面](https://github.com/Jeansmr/homework-sentinel/releases) 下载，
 或者按下面的步骤自己打包。
@@ -117,6 +117,28 @@
 > 安装包最低支持安卓 7.0（API 24），使用 v2 签名方案，绝大多数手机直接可装。
 > 如果以后要把 `minSdk` 降到 23 或更低，请先在 `android/app/build.gradle.kts` 里
 > 为签名配置打开 `enableV1Signing`。
+
+#### 如果打开就闪退
+
+**先确认装的是 v1.0.1 或更新版本。** v1.0.0 的启动代码没有异常保护，
+当系统缺少「Android System WebView」组件时会直接闪退，且看不到原因。
+
+v1.0.1 起做了这些事：
+
+- 启动前先检查 WebView 是否可用，不可用就告诉你原因
+- 启动全程有异常保护，任何一步出错都显示错误页而不是闪退
+- 未捕获的异常会写进本地文件，下次打开直接把原因显示出来
+- 错误页上有「重新打开应用」和「复制错误信息」两个按钮
+
+**最常见的闪退原因是系统 WebView 被禁用或被精简**，恢复办法：
+
+1. 到应用商店搜索并更新「Android System WebView」和「Chrome」
+2. 设置 → 应用管理 → 显示系统程序 → Android System WebView → 启用
+3. 设置 → 应用管理 → 作业哨兵 → 清除数据后重新打开
+4. 重启手机后再试
+
+如果错误页出现了，点「复制错误信息」把内容发出来，就能直接定位到具体原因
+（错误页里包含手机型号、系统版本、WebView 版本和完整堆栈）。
 
 ### 网页版
 
